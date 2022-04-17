@@ -1,15 +1,9 @@
-import random
-import numpy as np
-from tqdm import tqdm_notebook
-from collections import defaultdict
-
 import torch
-import torch.nn as nn
-from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset
 from transformers import *
 
-from create_dataset import MOSI, MOSEI, UR_FUNNY, PAD, UNK
+from create_dataset import MOSI, MOSEI, UR_FUNNY, PAD
 
 bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
@@ -28,7 +22,7 @@ class MSADataset(Dataset):
         else:
             print("Dataset not defined correctly")
             exit()
-        
+
         self.data, self.word2id, self.pretrained_emb = dataset.get_data(config.mode)
         self.len = len(self.data)
 
@@ -59,13 +53,13 @@ def get_loader(hp, config, shuffle=True):
     """Load DataLoader of given DialogDataset"""
 
     dataset = MSADataset(config)
-    
+
     print(config.mode)
     config.data_len = len(dataset)
 
     config.lav_dim = dataset.lav_dim
     config.lav_len = dataset.lav_len
-    
+
     if config.mode == 'train':
         hp.n_train = len(dataset)
     elif config.mode == 'valid':
@@ -79,15 +73,14 @@ def get_loader(hp, config, shuffle=True):
         '''
         # for later use we sort the batch in descending order of length
         batch = sorted(batch, key=lambda x: x[0][0].shape[0], reverse=True)
-        
+
         # get the data out of the batch - use pad sequence util functions from PyTorch to pad things
 
-
         labels = torch.cat([torch.from_numpy(sample[1]) for sample in batch], dim=0)
-        
+
         # MOSEI sentiment labels locate in the first column of sentiment matrix
         if labels.size(1) == 7:
-            labels = labels[:,0][:,None]
+            labels = labels[:, 0][:, None]
 
         sentences = pad_sequence([torch.LongTensor(sample[0][0]) for sample in batch], padding_value=PAD)
         visual = pad_sequence([torch.FloatTensor(sample[0][1]) for sample in batch])
@@ -102,7 +95,7 @@ def get_loader(hp, config, shuffle=True):
         for sample in batch:
             text = " ".join(sample[0][3])
             encoded_bert_sent = bert_tokenizer.encode_plus(
-                text, max_length=SENT_LEN+2, add_special_tokens=True, truncation=True, padding='max_length')
+                text, max_length=SENT_LEN + 2, add_special_tokens=True, truncation=True, padding='max_length')
             bert_details.append(encoded_bert_sent)
 
         # Bert things are batch_first
@@ -114,7 +107,6 @@ def get_loader(hp, config, shuffle=True):
         lengths = torch.LongTensor([sample[0][0].shape[0] for sample in batch])
 
         return sentences, visual, acoustic, labels, lengths, bert_sentences, bert_sentence_types, bert_sentence_att_mask
-
 
     data_loader = DataLoader(
         dataset=dataset,

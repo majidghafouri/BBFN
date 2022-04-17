@@ -1,27 +1,20 @@
-import torch
-from torch import nn
 import sys
-import models
-import torch.optim as optim
-import numpy as np
 import time
-import torch.nn.functional as F
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-import os
-import pickle
 
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import accuracy_score, f1_score
+import torch.nn.functional as F
+from torch import nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+from models import MULTModel
 # from utils import DiffLoss, MSE, SIMSE, CMD
-from utils import CMD, MSE
+from utils import CMD
 from utils.eval_metrics import *
 from utils.tools import *
-from models import MULTModel
+
 
 class Solver(object):
-    def __init__(self, hyp_params, train_loader, dev_loader, test_loader, is_train=True, model=None, pretrained_emb=None):
+    def __init__(self, hyp_params, train_loader, dev_loader, test_loader, is_train=True, model=None,
+                 pretrained_emb=None):
         self.hp = hp = hyp_params
         self.epoch_i = 0
         self.train_loader = train_loader
@@ -37,7 +30,7 @@ class Solver(object):
         # initialize the model
         if model is None:
             self.model = model = MULTModel(hp)
-        
+
         # Initialize weight of Embedding matrix with Glove embeddings
         if not self.hp.use_bert:
             if self.hp.pretrained_emb is not None:
@@ -54,14 +47,14 @@ class Solver(object):
             self.optimizer = getattr(torch.optim, self.hp.optim)(
                 filter(lambda p: p.requires_grad, self.model.parameters()),
                 lr=self.hp.lr)
-        
+
         # criterion
         if self.hp.dataset == "ur_funny":
             self.criterion = criterion = nn.CrossEntropyLoss(reduction="mean")
             # self.criterion = criterion = nn.BCELoss()
-        else: # mosi and mosei are regression datasets
+        else:  # mosi and mosei are regression datasets
             self.criterion = criterion = nn.MSELoss(reduction="mean")
-        
+
         if self.hp.use_disc:
             self.criterion_d = nn.BCELoss()
             self.lambda_d = hp.lambda_d
@@ -77,13 +70,12 @@ class Solver(object):
             elif self.hp.data == "ur_funny":
                 if "bert" in name:
                     param.requires_grad = False
-            
+
             if 'weight_hh' in name:
                 nn.init.orthogonal_(param)
             # print('\t' + name, param.requires_grad)
 
         self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', patience=20, factor=0.1, verbose=True)
-
 
     ####################################################################
     #
@@ -105,8 +97,8 @@ class Solver(object):
         # ctc_a2l_optimizer, ctc_v2l_optimizer = self.ctc_a2l_optimizer, self.ctc_v2l_optimizer
         # ctc_criterion = self.ctc_criterion
 
-
-        def train(model, optimizer, criterion, criterion_d, ctc_a2l_module, ctc_v2l_module, ctc_a2l_optimizer, ctc_v2l_optimizer, ctc_criterion):
+        def train(model, optimizer, criterion, criterion_d, ctc_a2l_module, ctc_v2l_module, ctc_a2l_optimizer,
+                  ctc_v2l_optimizer, ctc_criterion):
             epoch_loss = 0
             best_valid_loss = float('inf')
 
@@ -118,11 +110,9 @@ class Solver(object):
             train_losses = []
             valid_losses = []
 
-
-
             for i_batch, batch_data in enumerate(self.train_loader):
                 text, visual, audio, y, l, bert_sent, bert_sent_type, bert_sent_mask = batch_data
-                
+
                 # if i_batch == 2:
                 #     break
 
@@ -130,18 +120,18 @@ class Solver(object):
                 if ctc_criterion is not None:
                     ctc_a2l_module.zero_grad()
                     ctc_v2l_module.zero_grad()
-                    
+
                 if self.hp.use_cuda:
                     with torch.cuda.device(0):
                         text, visual, audio, y, l, bert_sent, bert_sent_type, bert_sent_mask = \
-                        text.cuda(), visual.cuda(), audio.cuda(), y.cuda(), l.cuda(), bert_sent.cuda(), \
-                        bert_sent_type.cuda(), bert_sent_mask.cuda()
-                        if self.hp.dataset=="ur_funny":
+                            text.cuda(), visual.cuda(), audio.cuda(), y.cuda(), l.cuda(), bert_sent.cuda(), \
+                            bert_sent_type.cuda(), bert_sent_mask.cuda()
+                        if self.hp.dataset == "ur_funny":
                             y = y.squeeze()
-                
+
                 batch_size = y.size(0)
                 batch_chunk = self.hp.batch_chunk
-                    
+
                 combined_loss = 0
                 net = nn.DataParallel(model) if batch_size > 10 else model
 
@@ -149,7 +139,8 @@ class Solver(object):
                 if batch_chunk > 1:
                     pass
                 else:
-                    preds, disc_preds, disc_trues = model(text, visual, audio, l, bert_sent, bert_sent_type, bert_sent_mask)
+                    preds, disc_preds, disc_trues = model(text, visual, audio, l, bert_sent, bert_sent_type,
+                                                          bert_sent_mask)
                     # if self.hp.dataset == "ur_funny":
                     #     y = y.unsqueeze(-1)
                     raw_loss = criterion(preds, y)
@@ -159,10 +150,10 @@ class Solver(object):
                         disc_loss = criterion_d(disc_preds, disc_trues)
                         combined_loss += self.lambda_d * disc_loss
                     combined_loss.backward()
-                
+
                 torch.nn.utils.clip_grad_norm_(model.parameters(), self.hp.clip)
                 optimizer.step()
-                
+
                 proc_loss += raw_loss.item() * batch_size
                 proc_size += batch_size
                 epoch_loss += combined_loss.item() * batch_size
@@ -170,10 +161,10 @@ class Solver(object):
                     avg_loss = proc_loss / proc_size
                     elapsed_time = time.time() - start_time
                     print('Epoch {:2d} | Batch {:3d}/{:3d} | Time/Batch(ms) {:5.2f} | Train Loss {:5.4f}'.
-                        format(epoch, i_batch, num_batches, elapsed_time * 1000 / self.hp.log_interval, avg_loss))
+                          format(epoch, i_batch, num_batches, elapsed_time * 1000 / self.hp.log_interval, avg_loss))
                     proc_loss, proc_size = 0, 0
                     start_time = time.time()
-                    
+
             return epoch_loss / self.hp.n_train
 
         def evaluate(model, ctc_a2l_module, ctc_v2l_module, criterion, criterion_d, test=False):
@@ -181,7 +172,7 @@ class Solver(object):
             loader = self.test_loader if test else self.dev_loader
             total_loss = 0.0
             total_l1_loss = 0.0
-        
+
             results = []
             truths = []
 
@@ -202,22 +193,22 @@ class Solver(object):
                             bert_sent, bert_sent_type, bert_sent_mask = bert_sent.cuda(), bert_sent_type.cuda(), bert_sent_mask.cuda()
                             if self.hp.dataset == 'iemocap':
                                 y = y.long()
-                        
+
                             if self.hp.dataset == 'ur_funny':
                                 y = y.squeeze()
 
-                    batch_size = lengths.size(0) # bert_sent in size (bs, seq_len, emb_size)
-                    
+                    batch_size = lengths.size(0)  # bert_sent in size (bs, seq_len, emb_size)
+
                     if (ctc_a2l_module is not None) and (ctc_v2l_module is not None):
                         ctc_a2l_net = nn.DataParallel(ctc_a2l_module) if batch_size > 10 else ctc_a2l_module
                         ctc_v2l_net = nn.DataParallel(ctc_v2l_module) if batch_size > 10 else ctc_v2l_module
-                        audio, _ = ctc_a2l_net(audio)     # audio aligned to text
-                        vision, _ = ctc_v2l_net(vision)   # vision aligned to text
+                        audio, _ = ctc_a2l_net(audio)  # audio aligned to text
+                        vision, _ = ctc_v2l_net(vision)  # vision aligned to text
 
                     # we don't need disc loss here anymore
-                    preds, disc_preds, disc_truths = model(text, vision, audio, lengths, bert_sent, bert_sent_type, bert_sent_mask)
+                    preds, disc_preds, disc_truths = model(text, vision, audio, lengths, bert_sent, bert_sent_type,
+                                                           bert_sent_mask)
 
-                    
                     # if self.epoch in [1,2,5,6,7]:
                     #     enc_lv_l_all.append(enc_res['lv_l'].detach().cpu().numpy())
                     #     enc_lv_v_all.append(enc_res['lv_v'].detach().cpu().numpy())
@@ -242,7 +233,7 @@ class Solver(object):
                     # Collect the results into ntest if test else self.hp.n_valid)
                     results.append(preds)
                     truths.append(y)
-            
+
             avg_loss = total_loss / (self.hp.n_test if test else self.hp.n_valid)
             if not test:
                 avg_l1_loss = total_l1_loss / self.hp.n_valid
@@ -258,7 +249,7 @@ class Solver(object):
         best_epoch = -1
         patience = 20
 
-        for epoch in range(1, self.hp.num_epochs+1):
+        for epoch in range(1, self.hp.num_epochs + 1):
             start = time.time()
 
             self.epoch = epoch
@@ -266,16 +257,17 @@ class Solver(object):
             train(model, optimizer, criterion, criterion_d, None, None, None, None, None)
             val_loss, val_f1_loss, _, _ = evaluate(model, None, None, criterion, criterion_d, test=False)
             test_loss, _, results, truths = evaluate(model, None, None, criterion, criterion_d, test=True)
-            
+
             end = time.time()
-            duration = end-start
-            scheduler.step(val_loss)    # Decay learning rate by validation loss
+            duration = end - start
+            scheduler.step(val_loss)  # Decay learning rate by validation loss
 
             # validation F1
-            print("-"*50)
-            print('Epoch {:2d} | Time {:5.4f} sec | Valid Loss {:5.4f} | Valid L1 Loss {:5.4f} | Test Loss {:5.4f}'.format(epoch, duration, val_loss, val_f1_loss, test_loss))
-            print("-"*50)
-            
+            print("-" * 50)
+            print(
+                'Epoch {:2d} | Time {:5.4f} sec | Valid Loss {:5.4f} | Valid L1 Loss {:5.4f} | Test Loss {:5.4f}'.format(
+                    epoch, duration, val_loss, val_f1_loss, test_loss))
+            print("-" * 50)
 
             if best_valid > val_loss:
                 best_epoch = epoch
@@ -294,7 +286,7 @@ class Solver(object):
                         eval_mosi(results, truths, True)
                     elif self.hp.dataset == 'iemocap':
                         eval_iemocap(results, truths)
-                
+
                     print(f"Saved model at pre_trained_models/{self.hp.name}.pt!")
                     save_model(self.hp, model, name=self.hp.name)
                     # best_valid = test_loss

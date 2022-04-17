@@ -1,8 +1,8 @@
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import Parameter
-import torch.nn.functional as F
-import sys
+
 
 # Code adapted from the fairseq repo.
 
@@ -107,10 +107,11 @@ class MultiheadAttention(nn.Module):
             if attn_mask is not None:
                 attn_mask = torch.cat([attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1)
 
-        
         # project (batch_size, seq_len, seq_len)
-        add_mask = add_mask.unsqueeze(1).expand(add_mask.size(0), self.num_heads, orig_len, src_len).contiguous().view(-1, src_len, src_len)
-        mul_mask = mul_mask.unsqueeze(1).expand(mul_mask.size(0), self.num_heads, orig_len, src_len).contiguous().view(-1, src_len, src_len)
+        add_mask = add_mask.unsqueeze(1).expand(add_mask.size(0), self.num_heads, orig_len, src_len).contiguous().view(
+            -1, src_len, src_len)
+        mul_mask = mul_mask.unsqueeze(1).expand(mul_mask.size(0), self.num_heads, orig_len, src_len).contiguous().view(
+            -1, src_len, src_len)
 
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
@@ -122,7 +123,7 @@ class MultiheadAttention(nn.Module):
                 print(attn_weights.shape)
                 print(add_mask.shape)
                 assert False
-        
+
         # if attention from language to other modal, then maybe align to a void space (after the end of a sentence)
         attn_weights = F.softmax(attn_weights.float(), dim=-1).type_as(attn_weights)
 

@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 
+
 # Code adapted from the fairseq repo.
 
 def make_positions(tensor, padding_idx, left_pad):
@@ -26,6 +27,7 @@ def make_positions(tensor, padding_idx, left_pad):
     new_tensor = tensor.clone()
     return new_tensor.masked_scatter_(mask, positions[mask]).long()
 
+
 class SinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length.
     Padding symbols are ignored, but it is necessary to specify whether padding
@@ -37,7 +39,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.left_pad = left_pad
-        self.weights = dict()   # device --> actual weight; due to nn.DataParallel :-(
+        self.weights = dict()  # device --> actual weight; due to nn.DataParallel :-(
         self.register_buffer('_float_tensor', torch.FloatTensor(1))
 
     @staticmethod
@@ -51,21 +53,22 @@ class SinusoidalPositionalEmbedding(nn.Module):
 
         emb_c2 = torch.arange(embedding_dim, dtype=torch.int32)
 
-        emb = torch.exp((emb_c2 // 2).to(torch.float) * -emb_c1) # (embedding_dim,)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0) # (num_emb, embedding_dim)
-        
+        emb = torch.exp((emb_c2 // 2).to(torch.float) * -emb_c1)  # (embedding_dim,)
+        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(
+            0)  # (num_emb, embedding_dim)
+
         # assign sinusoidal positional embedding to correct positions 
-        emb[:,emb_c2 % 2 == 0] = torch.sin(emb[:,emb_c2 % 2 == 0])
-        emb[:,emb_c2 % 2 == 1] = torch.cos(emb[:,emb_c2 % 2 == 1])
+        emb[:, emb_c2 % 2 == 0] = torch.sin(emb[:, emb_c2 % 2 == 0])
+        emb[:, emb_c2 % 2 == 1] = torch.cos(emb[:, emb_c2 % 2 == 1])
 
         # emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1) # (num_emb, half_dim*2)
-        
+
         if embedding_dim % 2 == 1:
             # zero pad
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         if padding_idx is not None:
             emb[padding_idx, :] = 0
-        
+
         return emb
 
     def forward(self, input):

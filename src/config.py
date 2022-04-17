@@ -1,17 +1,13 @@
-import os
 import argparse
-from datetime import datetime
-from collections import defaultdict
-from datetime import datetime
-from pathlib import Path
 import pprint
-from torch import optim
+from pathlib import Path
+
 import torch.nn as nn
+from torch import optim
 
 # path to a pretrained word embedding file
 word_emb_path = '/home/henry/glove/glove.840B.300d.txt'
-assert(word_emb_path is not None)
-
+assert (word_emb_path is not None)
 
 username = Path.home().name
 project_dir = Path(__file__).resolve().parent.parent.parent
@@ -66,7 +62,7 @@ class Config(object):
 
 def get_config(dataset='mosi', mode='train', batch_size=32, use_bert=False):
     config = Config(data=dataset, mode=mode)
-    
+
     config.dataset = dataset
     config.batch_size = batch_size
     config.use_bert = use_bert

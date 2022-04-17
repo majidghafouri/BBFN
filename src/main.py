@@ -1,12 +1,9 @@
-import torch
 import argparse
-import numpy as np
 
-from utils import *
-from torch.utils.data import DataLoader
-from solver import Solver
 from config import get_config
 from data_loader import get_loader
+from solver import Solver
+from utils import *
 
 parser = argparse.ArgumentParser(description='MOSEI Sentiment Analysis')
 parser.add_argument('-f', default='', type=str)
@@ -24,7 +21,7 @@ parser.add_argument('--lonly', action='store_true',
                     help='use the crossmodal fusion into l (default: False)')
 parser.add_argument('--aligned', action='store_true',
                     help='consider aligned experiment or not (default: False)')
-parser.add_argument('--dataset', type=str, default='mosi', choices=['mosi','mosei','ur_funny'],
+parser.add_argument('--dataset', type=str, default='mosi', choices=['mosi', 'mosei', 'ur_funny'],
                     help='dataset to use (default: mosei)')
 parser.add_argument('--data_path', type=str, default='data',
                     help='path for storing the dataset')
@@ -51,7 +48,8 @@ parser.add_argument('--use_bert', action='store_true', help='whether to use bert
                     to encode text inputs (default: False)')
 
 # Losses
-parser.add_argument('--lambda_d', type=float, default=0.1, help='portion of discriminator loss added to total loss (default: 0.1)')
+parser.add_argument('--lambda_d', type=float, default=0.1,
+                    help='portion of discriminator loss added to total loss (default: 0.1)')
 
 # Architecture
 parser.add_argument('--nlevels', type=int, default=5,
@@ -69,7 +67,8 @@ parser.add_argument('--enc_layers', type=int, default=1,
 parser.add_argument('--use_disc', action='store_true',
                     help='whether to add a discriminator to the domain-invariant encoder and the corresponding loss to the final training process')
 
-parser.add_argument('--proj_type', type=str, default='cnn',help='network type for input projection', choices=['LINEAR', 'CNN','LSTM','GRU'])
+parser.add_argument('--proj_type', type=str, default='cnn', help='network type for input projection',
+                    choices=['LINEAR', 'CNN', 'LSTM', 'GRU'])
 parser.add_argument('--lksize', type=int, default=3,
                     help='Kernel size of language projection CNN')
 parser.add_argument('--vksize', type=int, default=3,
@@ -126,7 +125,7 @@ output_dim_dict = {
     'mosei_senti': 1,
     'iemocap': 8,
     # 'ur_funny': 1   # comment this if using BCELoss
-    'ur_funny': 2 # comment this if using CrossEntropyLoss
+    'ur_funny': 2  # comment this if using CrossEntropyLoss
 }
 
 criterion_dict = {
@@ -143,7 +142,6 @@ if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
-
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         use_cuda = True
@@ -156,7 +154,7 @@ print("Start loading the data....")
 
 train_config = get_config(dataset, mode='train', batch_size=args.batch_size, use_bert=args.use_bert)
 valid_config = get_config(dataset, mode='valid', batch_size=args.batch_size, use_bert=args.use_bert)
-test_config = get_config(dataset, mode='test',  batch_size=args.batch_size, use_bert=args.use_bert)
+test_config = get_config(dataset, mode='test', batch_size=args.batch_size, use_bert=args.use_bert)
 
 # print(train_config)
 
@@ -207,10 +205,8 @@ hyp_params.output_dim = output_dim_dict.get(dataset, 1)
 # hyp_params.criterion = criterion_dict.get(dataset, 'MAELoss')
 hyp_params.criterion = criterion_dict.get(dataset, 'MSELoss')
 
-
 if __name__ == '__main__':
     solver = Solver(hyp_params, train_loader=train_loader, dev_loader=valid_loader,
                     test_loader=test_loader, is_train=True)
     solver.train_and_eval()
     exit()
-

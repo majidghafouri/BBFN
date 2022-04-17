@@ -1,11 +1,12 @@
-from torch.autograd import Function
-import torch.nn as nn
 import torch
 import torch.autograd.functional as F
+import torch.nn as nn
+from torch.autograd import Function
 
 """
 Adapted from https://github.com/fungtion/DSN/blob/master/functions.py
 """
+
 
 class ReverseLayerF(Function):
 
@@ -53,7 +54,6 @@ class DiffLoss(nn.Module):
         super(DiffLoss, self).__init__()
 
     def forward(self, input1, input2):
-
         batch_size = input1.size(0)
         input1 = input1.view(batch_size, -1)
         input2 = input2.view(batch_size, -1)
@@ -66,7 +66,6 @@ class DiffLoss(nn.Module):
 
         input1_l2_norm = torch.norm(input1, p=2, dim=1, keepdim=True).detach()
         input1_l2 = input1.div(input1_l2_norm.expand_as(input1) + 1e-6)
-        
 
         input2_l2_norm = torch.norm(input2, p=2, dim=1, keepdim=True).detach()
         input2_l2 = input2.div(input2_l2_norm.expand_as(input2) + 1e-6)
@@ -74,6 +73,7 @@ class DiffLoss(nn.Module):
         diff_loss = torch.mean((input1_l2.t().mm(input2_l2)).pow(2))
 
         return diff_loss
+
 
 class CMD(nn.Module):
     """
@@ -86,8 +86,8 @@ class CMD(nn.Module):
     def forward(self, x1, x2, n_moments):
         mx1 = torch.mean(x1, 0)
         mx2 = torch.mean(x2, 0)
-        sx1 = x1-mx1
-        sx2 = x2-mx2
+        sx1 = x1 - mx1
+        sx2 = x2 - mx2
         dm = self.matchnorm(mx1, mx2)
         scms = dm
         for i in range(n_moments - 1):
@@ -95,9 +95,9 @@ class CMD(nn.Module):
         return scms
 
     def matchnorm(self, x1, x2):
-        power = torch.pow(x1-x2,2)
+        power = torch.pow(x1 - x2, 2)
         summed = torch.sum(power)
-        sqrt = summed**(0.5)
+        sqrt = summed ** (0.5)
         return sqrt
         # return ((x1-x2)**2).sum().sqrt()
 
@@ -105,6 +105,7 @@ class CMD(nn.Module):
         ss1 = torch.mean(torch.pow(sx1, k), 0)
         ss2 = torch.mean(torch.pow(sx2, k), 0)
         return self.matchnorm(ss1, ss2)
+
 
 class AttSoftmax(torch.autograd.Function):
 
@@ -120,10 +121,10 @@ class AttSoftmax(torch.autograd.Function):
         ctx.save_for_backward(output)
 
         return output
-    
+
     @staticmethod
     def backward(ctx, grad_output):
-        output,  = ctx.saved_tensors    # read from tuple
+        output, = ctx.saved_tensors  # read from tuple
 
         attn_weights_mask = ctx.attn_weights_mask
         dim = ctx.attn_weights_mask
@@ -131,9 +132,6 @@ class AttSoftmax(torch.autograd.Function):
         grad_output = grad_output * output
 
         # grad_non_mask = grad_output - grad_output.sum(dim=dim, keepdim=True)
-        grad_non_mask = grad_output - grad_output*grad_output.sum(dim=-1).unsqueeze(-1)
-        out_grad=torch.masked_fill(grad_non_mask, attn_weights_mask, 0.0)
+        grad_non_mask = grad_output - grad_output * grad_output.sum(dim=-1).unsqueeze(-1)
+        out_grad = torch.masked_fill(grad_non_mask, attn_weights_mask, 0.0)
         return out_grad, None
-
-
-

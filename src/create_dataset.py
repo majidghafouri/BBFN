@@ -1,33 +1,36 @@
-import sys
-import mmsdk
 import os
-import re
 import pickle
-import numpy as np
-from tqdm import tqdm_notebook
+import re
+import sys
 from collections import defaultdict
-from mmsdk import mmdatasdk as md
-from subprocess import check_call, CalledProcessError
+from subprocess import check_call
 
+import numpy as np
 import torch
-import torch.nn as nn
+from mmsdk import mmdatasdk as md
+from tqdm import tqdm_notebook
 
 
 def to_pickle(obj, path):
     with open(path, 'wb') as f:
         pickle.dump(obj, f)
+
+
 def load_pickle(path):
     with open(path, 'rb') as f:
         return pickle.load(f)
+
 
 # construct a word2id mapping that automatically takes increment when new words are encountered
 word2id = defaultdict(lambda: len(word2id))
 UNK = word2id['<unk>']
 PAD = word2id['<pad>']
 
+
 # turn off the word2id - define a named function here to allow for pickling
 def return_unk():
     return UNK
+
 
 def load_emb(w2i, path_to_embedding, embedding_size=300, embedding_vocab=2196017, init_emb=None):
     if init_emb is None:
@@ -56,7 +59,7 @@ class MOSI:
             exit(0)
         else:
             sys.path.append(str(config.sdk_dir))
-        
+
         DATA_PATH = str(config.dataset_dir)
         CACHE_PATH = DATA_PATH + '/embedding_and_mapping.pt'
 
@@ -73,7 +76,6 @@ class MOSI:
             if not os.path.exists(DATA_PATH):
                 check_call(' '.join(['mkdir', '-p', DATA_PATH]), shell=True)
 
-
             # download highlevel features, low-level (raw) data and labels for the dataset MOSI
             # if the files are already present, instead of downloading it you just load it yourself.
             # here we use CMU_MOSI dataset as example.
@@ -87,21 +89,20 @@ class MOSI:
                 md.mmdataset(DATASET.raw, DATA_PATH)
             except RuntimeError:
                 print("Raw data have been downloaded previously.")
-                
+
             try:
                 md.mmdataset(DATASET.labels, DATA_PATH)
             except RuntimeError:
                 print("Labels have been downloaded previously.")
-            
+
             # define your different modalities - refer to the filenames of the CSD files
             visual_field = 'CMU_MOSI_Visual_Facet_41'
             acoustic_field = 'CMU_MOSI_COVAREP'
             text_field = 'CMU_MOSI_TimestampedWords'
 
-
             features = [
-                text_field, 
-                visual_field, 
+                text_field,
+                visual_field,
                 acoustic_field
             ]
 
@@ -132,11 +133,8 @@ class MOSI:
             dev_split = DATASET.standard_folds.standard_valid_fold
             test_split = DATASET.standard_folds.standard_test_fold
 
-
             # a sentinel epsilon for safe division, without it we will replace illegal values with a constant
             EPS = 1e-6
-
-            
 
             # place holders for the final train/dev/test dataset
             self.train = train = []
@@ -146,10 +144,10 @@ class MOSI:
 
             # define a regular expression to extract the video ID out of the keys
             pattern = re.compile('(.*)\[.*\]')
-            num_drop = 0 # a counter to count how many data points went into some processing issues
+            num_drop = 0  # a counter to count how many data points went into some processing issues
 
             for segment in dataset[label_field].keys():
-                
+
                 # get the video ID and the features out of the aligned dataset
                 vid = re.search(pattern, segment).group(1)
                 label = dataset[label_field][segment]['features']
@@ -160,7 +158,8 @@ class MOSI:
                 # if the sequences are not same length after alignment, there must be some problem with some modalities
                 # we should drop it or inspect the data again
                 if not _words.shape[0] == _visual.shape[0] == _acoustic.shape[0]:
-                    print(f"Encountered datapoint {vid} with text shape {_words.shape}, visual shape {_visual.shape}, acoustic shape {_acoustic.shape}")
+                    print(
+                        f"Encountered datapoint {vid} with text shape {_words.shape}, visual shape {_visual.shape}, acoustic shape {_acoustic.shape}")
                     num_drop += 1
                     continue
 
@@ -179,7 +178,8 @@ class MOSI:
                 for i, word in enumerate(_words):
                     if word[0] != b'sp':
                         actual_words.append(word[0].decode('utf-8'))
-                        words.append(word2id[word[0].decode('utf-8')]) # SDK stores strings as bytes, decode into strings here
+                        words.append(
+                            word2id[word[0].decode('utf-8')])  # SDK stores strings as bytes, decode into strings here
                         visual.append(_visual[i, :])
                         acoustic.append(_acoustic[i, :])
 
@@ -187,10 +187,11 @@ class MOSI:
                 visual = np.asarray(visual)
                 acoustic = np.asarray(acoustic)
 
-
                 # z-normalization per instance and remove nan/infs
-                visual = np.nan_to_num((visual - visual.mean(0, keepdims=True)) / (EPS + np.std(visual, axis=0, keepdims=True)))
-                acoustic = np.nan_to_num((acoustic - acoustic.mean(0, keepdims=True)) / (EPS + np.std(acoustic, axis=0, keepdims=True)))
+                visual = np.nan_to_num(
+                    (visual - visual.mean(0, keepdims=True)) / (EPS + np.std(visual, axis=0, keepdims=True)))
+                acoustic = np.nan_to_num(
+                    (acoustic - acoustic.mean(0, keepdims=True)) / (EPS + np.std(acoustic, axis=0, keepdims=True)))
 
                 if vid in train_split:
                     train.append(((words, visual, acoustic, actual_words), label, segment))
@@ -226,6 +227,7 @@ class MOSI:
             print("Mode is not set properly (train/dev/test)")
             exit()
 
+
 class MOSEI:
     def __init__(self, config):
 
@@ -234,7 +236,7 @@ class MOSEI:
             exit(0)
         else:
             sys.path.append(str(config.sdk_dir))
-        
+
         DATA_PATH = str(config.dataset_dir)
         CACHE_PATH = DATA_PATH + '/embedding_and_mapping.pt'
 
@@ -251,7 +253,6 @@ class MOSEI:
             if not os.path.exists(DATA_PATH):
                 check_call(' '.join(['mkdir', '-p', DATA_PATH]), shell=True)
 
-
             # download highlevel features, low-level (raw) data and labels for the dataset MOSEI
             # if the files are already present, instead of downloading it you just load it yourself.
             DATASET = md.cmu_mosei
@@ -264,20 +265,20 @@ class MOSEI:
                 md.mmdataset(DATASET.raw, DATA_PATH)
             except RuntimeError:
                 print("Raw data have been downloaded previously.")
-                
+
             try:
                 md.mmdataset(DATASET.labels, DATA_PATH)
             except RuntimeError:
                 print("Labels have been downloaded previously.")
-            
+
             # define your different modalities - refer to the filenames of the CSD files
             visual_field = 'CMU_MOSEI_VisualFacet42'
             acoustic_field = 'CMU_MOSEI_COVAREP'
             text_field = 'CMU_MOSEI_TimestampedWords'
 
             features = [
-                text_field, 
-                visual_field, 
+                text_field,
+                visual_field,
                 acoustic_field
             ]
 
@@ -308,7 +309,6 @@ class MOSEI:
             dev_split = DATASET.standard_folds.standard_valid_fold
             test_split = DATASET.standard_folds.standard_test_fold
 
-
             # a sentinel epsilon for safe division, without it we will replace illegal values with a constant
             EPS = 1e-6
 
@@ -320,10 +320,10 @@ class MOSEI:
 
             # define a regular expression to extract the video ID out of the keys
             pattern = re.compile('(.*)\[.*\]')
-            num_drop = 0 # a counter to count how many data points went into some processing issues
+            num_drop = 0  # a counter to count how many data points went into some processing issues
 
             for segment in dataset[label_field].keys():
-                
+
                 # get the video ID and the features out of the aligned dataset
                 try:
                     vid = re.search(pattern, segment).group(1)
@@ -337,7 +337,8 @@ class MOSEI:
                 # if the sequences are not same length after alignment, there must be some problem with some modalities
                 # we should drop it or inspect the data again
                 if not _words.shape[0] == _visual.shape[0] == _acoustic.shape[0]:
-                    print(f"Encountered datapoint {vid} with text shape {_words.shape}, visual shape {_visual.shape}, acoustic shape {_acoustic.shape}")
+                    print(
+                        f"Encountered datapoint {vid} with text shape {_words.shape}, visual shape {_visual.shape}, acoustic shape {_acoustic.shape}")
                     num_drop += 1
                     continue
 
@@ -356,7 +357,8 @@ class MOSEI:
                 for i, word in enumerate(_words):
                     if word[0] != b'sp':
                         actual_words.append(word[0].decode('utf-8'))
-                        words.append(word2id[word[0].decode('utf-8')]) # SDK stores strings as bytes, decode into strings here
+                        words.append(
+                            word2id[word[0].decode('utf-8')])  # SDK stores strings as bytes, decode into strings here
                         visual.append(_visual[i, :])
                         acoustic.append(_acoustic[i, :])
 
@@ -365,8 +367,10 @@ class MOSEI:
                 acoustic = np.asarray(acoustic)
 
                 # z-normalization per instance and remove nan/infs
-                visual = np.nan_to_num((visual - visual.mean(0, keepdims=True)) / (EPS + np.std(visual, axis=0, keepdims=True)))
-                acoustic = np.nan_to_num((acoustic - acoustic.mean(0, keepdims=True)) / (EPS + np.std(acoustic, axis=0, keepdims=True)))
+                visual = np.nan_to_num(
+                    (visual - visual.mean(0, keepdims=True)) / (EPS + np.std(visual, axis=0, keepdims=True)))
+                acoustic = np.nan_to_num(
+                    (acoustic - acoustic.mean(0, keepdims=True)) / (EPS + np.std(acoustic, axis=0, keepdims=True)))
 
                 if vid in train_split:
                     train.append(((words, visual, acoustic, actual_words), label, segment))
@@ -376,7 +380,6 @@ class MOSEI:
                     test.append(((words, visual, acoustic, actual_words), label, segment))
                 else:
                     print(f"Found video that doesn't belong to any splits: {vid}")
-                
 
             print(f"Total number of {num_drop} datapoints have been dropped.")
 
@@ -403,10 +406,10 @@ class MOSEI:
             print("Mode is not set properly (train/dev/test)")
             exit()
 
+
 class UR_FUNNY:
     def __init__(self, config):
 
-        
         DATA_PATH = str(config.dataset_dir)
         CACHE_PATH = DATA_PATH + '/embedding_and_mapping.pt'
 
@@ -419,23 +422,19 @@ class UR_FUNNY:
 
         except:
 
-
             # create folders for storing the data
             if not os.path.exists(DATA_PATH):
                 check_call(' '.join(['mkdir', '-p', DATA_PATH]), shell=True)
 
+            data_folds = load_pickle(DATA_PATH + '/data_folds.pkl')
+            train_split = data_folds['train']
+            dev_split = data_folds['dev']
+            test_split = data_folds['test']
 
-            data_folds=load_pickle(DATA_PATH + '/data_folds.pkl')
-            train_split=data_folds['train']
-            dev_split=data_folds['dev']
-            test_split=data_folds['test']
-
-            
-
-            word_aligned_openface_sdk=load_pickle(DATA_PATH + "/openface_features_sdk.pkl")
-            word_aligned_covarep_sdk=load_pickle(DATA_PATH + "/covarep_features_sdk.pkl")
-            word_embedding_idx_sdk=load_pickle(DATA_PATH + "/word_embedding_indexes_sdk.pkl")
-            word_list_sdk=load_pickle(DATA_PATH + "/word_list.pkl")
+            word_aligned_openface_sdk = load_pickle(DATA_PATH + "/openface_features_sdk.pkl")
+            word_aligned_covarep_sdk = load_pickle(DATA_PATH + "/covarep_features_sdk.pkl")
+            word_embedding_idx_sdk = load_pickle(DATA_PATH + "/word_embedding_indexes_sdk.pkl")
+            word_list_sdk = load_pickle(DATA_PATH + "/word_list.pkl")
             humor_label_sdk = load_pickle(DATA_PATH + "/humor_label_sdk.pkl")
 
             # a sentinel epsilon for safe division, without it we will replace illegal values with a constant
@@ -447,7 +446,7 @@ class UR_FUNNY:
             self.test = test = []
             self.word2id = word2id
 
-            num_drop = 0 # a counter to count how many data points went into some processing issues
+            num_drop = 0  # a counter to count how many data points went into some processing issues
 
             # Iterate over all possible utterances
             for key in humor_label_sdk.keys():
@@ -457,7 +456,6 @@ class UR_FUNNY:
                 _acoustic = np.array(word_aligned_covarep_sdk[key]['punchline_features'])
                 _visual = np.array(word_aligned_openface_sdk[key]['punchline_features'])
 
-
                 if not _word_id.shape[0] == _acoustic.shape[0] == _visual.shape[0]:
                     num_drop += 1
                     continue
@@ -466,7 +464,6 @@ class UR_FUNNY:
                 label = np.array([np.nan_to_num(label)])[:, np.newaxis]
                 _visual = np.nan_to_num(_visual)
                 _acoustic = np.nan_to_num(_acoustic)
-
 
                 actual_words = []
                 words = []
@@ -484,8 +481,10 @@ class UR_FUNNY:
                 acoustic = np.asarray(acoustic)
 
                 # z-normalization per instance and remove nan/infs
-                visual = np.nan_to_num((visual - visual.mean(0, keepdims=True)) / (EPS + np.std(visual, axis=0, keepdims=True)))
-                acoustic = np.nan_to_num((acoustic - acoustic.mean(0, keepdims=True)) / (EPS + np.std(acoustic, axis=0, keepdims=True)))
+                visual = np.nan_to_num(
+                    (visual - visual.mean(0, keepdims=True)) / (EPS + np.std(visual, axis=0, keepdims=True)))
+                acoustic = np.nan_to_num(
+                    (acoustic - acoustic.mean(0, keepdims=True)) / (EPS + np.std(acoustic, axis=0, keepdims=True)))
 
                 if key in train_split:
                     train.append(((words, visual, acoustic, actual_words), label))

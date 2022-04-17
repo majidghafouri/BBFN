@@ -1,10 +1,12 @@
-import torch
-from torch import nn
-import torch.nn.functional as F
-from modules.position_embedding import SinusoidalPositionalEmbedding
-from modules.multihead_attention import MultiheadAttention
-from modules.encoders import DIVEncoder
 import math
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from encoders import DIVEncoder
+from multihead_attention import MultiheadAttention
+from position_embedding import SinusoidalPositionalEmbedding
 
 
 class GatedTransformer(nn.Module):
@@ -20,15 +22,16 @@ class GatedTransformer(nn.Module):
         res_dropout (float): dropout applied on the residual block
         attn_mask (bool): whether to apply mask on the attention weights
     """
+
     def __init__(self, embed_dim, num_heads, layers, attn_dropout=0.0, relu_dropout=0.0, res_dropout=0.0,
-        embed_dropout=0.0, div_dropout=0.0, attn_mask=False, use_disc=True):
+                 embed_dropout=0.0, div_dropout=0.0, attn_mask=False, use_disc=True):
         super().__init__()
-        self.dropout = embed_dropout      # Embedding dropout
+        self.dropout = embed_dropout  # Embedding dropout
         self.attn_dropout = attn_dropout
         self.embed_dim = embed_dim
         self.embed_scale = math.sqrt(embed_dim)
         self.embed_positions = SinusoidalPositionalEmbedding(embed_dim)
-        
+
         self.attn_mask = attn_mask
 
         # a pair of transformers plus a domain-invariant encoder
@@ -38,24 +41,25 @@ class GatedTransformer(nn.Module):
 
         for layer in range(layers):
             l2other_new = TransformerEncoderLayer(embed_dim,
-                                                num_heads=num_heads,
-                                                attn_dropout=attn_dropout,
-                                                relu_dropout=relu_dropout,
-                                                res_dropout=res_dropout,
-                                                attn_mask=attn_mask)
+                                                  num_heads=num_heads,
+                                                  attn_dropout=attn_dropout,
+                                                  relu_dropout=relu_dropout,
+                                                  res_dropout=res_dropout,
+                                                  attn_mask=attn_mask)
             other2l_new = TransformerEncoderLayer(embed_dim,
-                                                num_heads=num_heads,
-                                                attn_dropout=attn_dropout,
-                                                relu_dropout=relu_dropout,
-                                                res_dropout=res_dropout,
-                                                attn_mask=attn_mask)
+                                                  num_heads=num_heads,
+                                                  attn_dropout=attn_dropout,
+                                                  relu_dropout=relu_dropout,
+                                                  res_dropout=res_dropout,
+                                                  attn_mask=attn_mask)
 
             if layer == 0:
                 new_div_layer = DIVEncoder(embed_dim, embed_dim, prj_type='linear', use_disc=use_disc)
             else:
                 # TODO: Change dropout rate here
                 # new_div_layer = DIVEncoder(embed_dim, embed_dim, prj_type='rnn', rnn_type='lstm', rdc_type='avg', use_disc=use_disc)
-                new_div_layer = DIVEncoder(embed_dim, embed_dim, prj_type='rnn', rnn_type='gru', rdc_type='avg', use_disc=use_disc)
+                new_div_layer = DIVEncoder(embed_dim, embed_dim, prj_type='rnn', rnn_type='gru', rdc_type='avg',
+                                           use_disc=use_disc)
 
             self.l2other_layers.append(l2other_new)
             self.other2l_layers.append(other2l_new)
@@ -66,7 +70,7 @@ class GatedTransformer(nn.Module):
         if self.normalize:
             self.layer_norm = LayerNorm(embed_dim)
 
-    def forward_transformer(self, x_in, x_in_k = None, x_in_v = None):
+    def forward_transformer(self, x_in, x_in_k=None, x_in_v=None):
         """
         Args:
             x_in (FloatTensor): embedded input of shape `(src_len, batch, embed_dim)`
@@ -82,7 +86,7 @@ class GatedTransformer(nn.Module):
         # embed tokens and positions
         x = self.embed_scale * x_in
         if self.embed_positions is not None:
-            x += self.embed_positions(x_in.transpose(0, 1)[:, :, 0]).transpose(0, 1)   # Add positional embedding
+            x += self.embed_positions(x_in.transpose(0, 1)[:, :, 0]).transpose(0, 1)  # Add positional embedding
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         if x_in_k is not None and x_in_v is not None:
@@ -90,11 +94,11 @@ class GatedTransformer(nn.Module):
             x_k = self.embed_scale * x_in_k
             x_v = self.embed_scale * x_in_v
             if self.embed_positions is not None:
-                x_k += self.embed_positions(x_in_k.transpose(0, 1)[:, :, 0]).transpose(0, 1)   # Add positional embedding
-                x_v += self.embed_positions(x_in_v.transpose(0, 1)[:, :, 0]).transpose(0, 1)   # Add positional embedding
+                x_k += self.embed_positions(x_in_k.transpose(0, 1)[:, :, 0]).transpose(0, 1)  # Add positional embedding
+                x_v += self.embed_positions(x_in_v.transpose(0, 1)[:, :, 0]).transpose(0, 1)  # Add positional embedding
             x_k = F.dropout(x_k, p=self.dropout, training=self.training)
             x_v = F.dropout(x_v, p=self.dropout, training=self.training)
-        
+
         # encoder layers
         intermediates = [x]
         for layer in self.layers:
@@ -108,7 +112,7 @@ class GatedTransformer(nn.Module):
             x = self.layer_norm(x)
 
         return x
-    
+
     def forward(self, seq_l, seq_other, h_l, h_other, lengths=None, mask=None):
         """Forward 2 input modals thorugh the DIVencoder and Trnasformer 
         Args:
@@ -141,11 +145,12 @@ class GatedTransformer(nn.Module):
         # resl_all = []
         # resother_all = []
 
-        for layer_i, (div_encoder, trans_l2other, trans_other2l) in enumerate(zip(self.div_encoders, self.l2other_layers,
-         self.other2l_layers)):
-            enc_l, enc_other, disc_out, disc_labels = div_encoder(h_l, h_other, lengths, mask) # batch_size, emb_size
+        for layer_i, (div_encoder, trans_l2other, trans_other2l) in enumerate(
+                zip(self.div_encoders, self.l2other_layers,
+                    self.other2l_layers)):
+            enc_l, enc_other, disc_out, disc_labels = div_encoder(h_l, h_other, lengths, mask)  # batch_size, emb_size
 
-            ctr_vec = torch.cat([enc_l, enc_other], dim=-1) # seq_len x bs x (2 * emb_size)
+            ctr_vec = torch.cat([enc_l, enc_other], dim=-1)  # seq_len x bs x (2 * emb_size)
 
             disc_out_all.append(disc_out)
             disc_labels_all.append(disc_labels)
@@ -154,7 +159,8 @@ class GatedTransformer(nn.Module):
             l2other = trans_other2l(input_other, x_k=input_l, x_v=input_l, ctr_vec=ctr_vec, lengths=lengths, mode='l2o')
 
             # project other modals to language
-            other2l = trans_l2other(input_l, x_k=input_other, x_v=input_other, ctr_vec=ctr_vec, lengths=lengths, mode='o2l')
+            other2l = trans_l2other(input_l, x_k=input_other, x_v=input_other, ctr_vec=ctr_vec, lengths=lengths,
+                                    mode='o2l')
 
             # resl_all.append(other2l)
             # resother_all.append(l2other)
@@ -171,13 +177,14 @@ class GatedTransformer(nn.Module):
         disc_out_all = torch.cat(disc_out_all)
         disc_labels_all = torch.cat(disc_labels_all)
 
-        return other2l, l2other, disc_out_all, disc_labels_all # placeholder for DIV output
+        return other2l, l2other, disc_out_all, disc_labels_all  # placeholder for DIV output
 
     def max_positions(self):
         """Maximum input length supported by the encoder."""
         if self.embed_positions is None:
             return self.max_source_positions
         return min(self.max_source_positions, self.embed_positions.max_positions())
+
 
 class TransformerEncoderLayer(nn.Module):
     """Encoder layer block.
@@ -197,7 +204,7 @@ class TransformerEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
-        
+
         self.self_attn = MultiheadAttention(
             embed_dim=self.embed_dim,
             num_heads=self.num_heads,
@@ -211,17 +218,17 @@ class TransformerEncoderLayer(nn.Module):
 
         # Memory and Compound control
         self.mem_proj = nn.Sequential(
-            nn.Linear(2*embed_dim, embed_dim),
+            nn.Linear(2 * embed_dim, embed_dim),
             nn.Sigmoid()
         )
         self.att_proj = nn.Sequential(
-            nn.Linear(2*embed_dim, embed_dim),
-            nn.Sigmoid()           
+            nn.Linear(2 * embed_dim, embed_dim),
+            nn.Sigmoid()
         )
 
         # Dense Layer
-        self.fc1 = Linear(self.embed_dim, 4*self.embed_dim)   # The "Add & Norm" part in the paper
-        self.fc2 = Linear(4*self.embed_dim, self.embed_dim)
+        self.fc1 = Linear(self.embed_dim, 4 * self.embed_dim)  # The "Add & Norm" part in the paper
+        self.fc2 = Linear(4 * self.embed_dim, self.embed_dim)
         self.layer_norms = nn.ModuleList([LayerNorm(self.embed_dim) for _ in range(2)])
 
     def forward(self, x, x_k=None, x_v=None, ctr_vec=None, lengths=None, mode='l2o'):
@@ -238,7 +245,7 @@ class TransformerEncoderLayer(nn.Module):
         """
         residual = x
         x = self.maybe_layer_norm(0, x, before=True)
-        
+
         def get_mask(batch_size, len1, len2, lengths=None, lang_proj=False):
             """l2o means x is other modal
             Returns:
@@ -248,14 +255,15 @@ class TransformerEncoderLayer(nn.Module):
 
             bool_mask1 = torch.cuda.BoolTensor(batch_size, len1, len2)
             bool_mask2 = torch.cuda.BoolTensor(batch_size, len1, len2)
-            for i,j in enumerate(lengths):
-                bool_mask2[i,:,:] = False
-                if j<len1:
+            for i, j in enumerate(lengths):
+                bool_mask2[i, :, :] = False
+                if j < len1:
                     # bool_mask[i,j:,j:] is TOTALLY WRONG
-                    bool_mask1[i,j:,:] = True
-                    bool_mask1[i,:,j:] = True
-                    bool_mask2[i,:,j:] = True   # only add minus infinity to the region of exceeded lengths in valid inputs
-                bool_mask1[i,:j,:j] = False
+                    bool_mask1[i, j:, :] = True
+                    bool_mask1[i, :, j:] = True
+                    bool_mask2[i, :,
+                    j:] = True  # only add minus infinity to the region of exceeded lengths in valid inputs
+                bool_mask1[i, :j, :j] = False
 
             add_mask = torch.masked_fill(torch.zeros(bool_mask2.size()), bool_mask2, float('-inf'))
             mul_mask = torch.masked_fill(torch.ones(bool_mask1.size()), bool_mask1, 0.0)
@@ -275,7 +283,7 @@ class TransformerEncoderLayer(nn.Module):
             x, _ = self.self_attn(query=x, key=x, value=x, add_mask=add_mask, mul_mask=mul_mask)
         else:
             x_k = self.maybe_layer_norm(0, x_k, before=True)
-            x_v = self.maybe_layer_norm(0, x_v, before=True) 
+            x_v = self.maybe_layer_norm(0, x_v, before=True)
             x, _ = self.self_attn(query=x, key=x_k, value=x_v, add_mask=add_mask, mul_mask=mul_mask)
         x = F.dropout(x, p=self.res_dropout, training=self.training)
 
@@ -305,6 +313,7 @@ class TransformerEncoderLayer(nn.Module):
         else:
             return x
 
+
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a tensor with -inf."""
     return t.float().fill_(float('-inf')).type_as(t)
@@ -314,10 +323,11 @@ def buffered_future_mask(tensor, tensor2=None):
     dim1 = dim2 = tensor.size(0)
     if tensor2 is not None:
         dim2 = tensor2.size(0)
-    future_mask = torch.triu(fill_with_neg_inf(torch.ones(dim1, dim2)), 1+abs(dim2-dim1))
+    future_mask = torch.triu(fill_with_neg_inf(torch.ones(dim1, dim2)), 1 + abs(dim2 - dim1))
     if tensor.is_cuda:
         future_mask = future_mask.cuda()
     return future_mask[:dim1, :dim2]
+
 
 def Linear(in_features, out_features, bias=True):
     m = nn.Linear(in_features, out_features, bias)
@@ -326,9 +336,11 @@ def Linear(in_features, out_features, bias=True):
         nn.init.constant_(m.bias, 0.)
     return m
 
+
 def LayerNorm(embedding_dim):
     m = nn.LayerNorm(embedding_dim)
     return m
+
 
 if __name__ == '__main__':
     encoder = GatedTransformer(300, 4, 2)
